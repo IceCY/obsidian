@@ -4,17 +4,21 @@
     "type": "split",
     "children": [
       {
-        "id": "7d5249c219cdce92",
+        "id": "0a396ad281f2ba6b",
         "type": "tabs",
         "children": [
           {
-            "id": "aba1604c57ef1f39",
+            "id": "e3af40ece15e6c37",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
-              "icon": "lucide-file",
-              "title": "新标签页"
+              "type": "split-diff-view",
+              "state": {
+                "aFile": ".obsidian/community-plugins.json",
+                "bFile": ".obsidian/community-plugins.json",
+                "aRef": ""
+              },
+              "icon": "diff",
+              "title": "Diff: community-plugins.json  (Working Tree)"
             }
           }
         ]
@@ -150,20 +154,30 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "欢迎.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "欢迎 的大纲"
+              "title": "大纲"
+            }
+          },
+          {
+            "id": "2c96e1ff2dff4b10",
+            "type": "leaf",
+            "state": {
+              "type": "git-view",
+              "state": {},
+              "icon": "git-pull-request",
+              "title": "Source Control"
             }
           }
-        ]
+        ],
+        "currentTab": 5
       }
     ],
     "direction": "horizontal",
-    "width": 300
+    "width": 1203.5
   },
   "left-ribbon": {
     "hiddenItems": {
@@ -173,9 +187,13 @@
       "daily-notes:打开/创建今天的日记": false,
       "templates:插入模板": false,
       "command-palette:打开命令面板": false,
-      "bases:新建数据库": false
+      "bases:新建数据库": false,
+      "obsidian-git:Open Git source control": false
     }
   },
-  "active": "3c66497f1f0a4125",
-  "lastOpenFiles": []
+  "active": "e3af40ece15e6c37",
+  "lastOpenFiles": [
+    "未命名.md",
+    "未命名.base"
+  ]
 }
