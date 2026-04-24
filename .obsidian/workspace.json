@@ -11,14 +11,14 @@
             "id": "e3af40ece15e6c37",
             "type": "leaf",
             "state": {
-              "type": "split-diff-view",
+              "type": "markdown",
               "state": {
-                "aFile": ".obsidian/community-plugins.json",
-                "bFile": ".obsidian/community-plugins.json",
-                "aRef": ""
+                "file": "test again.md",
+                "mode": "source",
+                "source": false
               },
-              "icon": "diff",
-              "title": "Diff: community-plugins.json  (Working Tree)"
+              "icon": "lucide-file",
+              "title": "test again"
             }
           }
         ]
@@ -94,6 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "test again.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -103,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "反向链接"
+              "title": "test again 的反向链接列表"
             }
           },
           {
@@ -154,12 +155,13 @@
             "state": {
               "type": "outline",
               "state": {
+                "file": "test again.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "大纲"
+              "title": "test again 的大纲"
             }
           },
           {
@@ -191,8 +193,9 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "e3af40ece15e6c37",
+  "active": "3c66497f1f0a4125",
   "lastOpenFiles": [
+    "test again.md",
     "未命名.md",
     "未命名.base"
   ]
