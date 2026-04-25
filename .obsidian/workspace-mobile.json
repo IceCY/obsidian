@@ -11,14 +11,10 @@
             "id": "d283877e27ff2948",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "test.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "test"
+              "title": "新标签页"
             }
           }
         ]
@@ -165,7 +161,7 @@
       "bases:新建数据库": false
     }
   },
-  "active": "d283877e27ff2948",
+  "active": "fccd17693b13cb6a",
   "lastOpenFiles": [
     "test.md",
     "未命名.base",
