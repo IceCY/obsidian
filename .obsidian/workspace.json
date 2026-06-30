@@ -13,15 +13,40 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "Tools-Needed-For-VibeCoding.md",
+                "file": "agent安全/agent-sandbox/paper/(NDSS'25) IsolateGPT.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Tools-Needed-For-VibeCoding"
+              "title": "(NDSS'25) IsolateGPT"
+            }
+          },
+          {
+            "id": "2636ea3a637c6bbf",
+            "type": "leaf",
+            "state": {
+              "type": "markdown",
+              "state": {
+                "file": "agent安全/prompt注入及处理/攻击想法.md",
+                "mode": "source",
+                "source": false
+              },
+              "icon": "lucide-file",
+              "title": "攻击想法"
+            }
+          },
+          {
+            "id": "727fd1ec260ceb36",
+            "type": "leaf",
+            "state": {
+              "type": "graph",
+              "state": {},
+              "icon": "lucide-git-fork",
+              "title": "关系图谱"
             }
           }
-        ]
+        ],
+        "currentTab": 2
       }
     ],
     "direction": "vertical"
@@ -94,7 +119,6 @@
             "state": {
               "type": "backlink",
               "state": {
-                "file": "harness/how-to-harness/README.md.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -104,7 +128,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "README.md 的反向链接列表"
+              "title": "反向链接"
             }
           },
           {
@@ -193,17 +217,30 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "e3af40ece15e6c37",
+  "active": "bf7b689b398cf442",
   "lastOpenFiles": [
+    "AI Infra/bio.md",
+    "AI Infra/workqueue机制.md",
+    "AI Infra/write系统调用.md",
+    "AI Infra",
+    "agent基建",
+    "未命名.base",
+    "未命名.canvas",
+    "llm/学习/LLM流程.md",
+    "llm/未命名.md",
+    "llm/学习",
+    "产品经理/案例/MuleRun.md",
+    "未命名",
+    "llm",
+    "产品经理/案例",
+    "agent安全/prompt注入及处理/攻击想法.md",
+    "agent安全/agent-sandbox/paper/(NDSS'25) IsolateGPT.md",
+    "agent安全/prompt注入及处理",
+    "agent安全",
+    "Tools-Needed-For-VibeCoding.md",
+    "agent安全/agent-sandbox/paper",
     "vibe-coding/harness/how-to-harness/README.md.md",
     "2026-04-29.md",
-    "未命名.canvas",
-    "未命名.base",
-    "Tools-Needed-For-VibeCoding.md",
-    "未命名",
-    "vibe-coding",
-    "test again.md",
-    "vibe-coding/harness/how-to-harness",
-    "vibe-coding/harness"
+    "test again.md"
   ]
 }
