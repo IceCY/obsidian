@@ -13,40 +13,15 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "agent安全/agent-sandbox/paper/(NDSS'25) IsolateGPT.md",
+                "file": "AI Infra/workqueue机制.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "(NDSS'25) IsolateGPT"
-            }
-          },
-          {
-            "id": "2636ea3a637c6bbf",
-            "type": "leaf",
-            "state": {
-              "type": "markdown",
-              "state": {
-                "file": "agent安全/prompt注入及处理/攻击想法.md",
-                "mode": "source",
-                "source": false
-              },
-              "icon": "lucide-file",
-              "title": "攻击想法"
-            }
-          },
-          {
-            "id": "727fd1ec260ceb36",
-            "type": "leaf",
-            "state": {
-              "type": "graph",
-              "state": {},
-              "icon": "lucide-git-fork",
-              "title": "关系图谱"
+              "title": "workqueue机制"
             }
           }
-        ],
-        "currentTab": 2
+        ]
       }
     ],
     "direction": "vertical"
@@ -103,7 +78,7 @@
       }
     ],
     "direction": "horizontal",
-    "width": 200
+    "width": 300
   },
   "right": {
     "id": "746a1a90fa20bebd",
@@ -119,6 +94,7 @@
             "state": {
               "type": "backlink",
               "state": {
+                "file": "harness/how-to-harness/README.md.md",
                 "collapseAll": false,
                 "extraContext": false,
                 "sortOrder": "alphabetical",
@@ -128,7 +104,7 @@
                 "unlinkedCollapsed": true
               },
               "icon": "links-coming-in",
-              "title": "反向链接"
+              "title": "README.md 的反向链接列表"
             }
           },
           {
@@ -179,17 +155,17 @@
             "state": {
               "type": "outline",
               "state": {
-                "file": "Tools-Needed-For-VibeCoding.md",
+                "file": "harness/how-to-harness/README.md.md",
                 "followCursor": false,
                 "showSearch": false,
                 "searchQuery": ""
               },
               "icon": "lucide-list",
-              "title": "Tools-Needed-For-VibeCoding 的大纲"
+              "title": "README.md 的大纲"
             }
           },
           {
-            "id": "bf7b689b398cf442",
+            "id": "2c96e1ff2dff4b10",
             "type": "leaf",
             "state": {
               "type": "git-view",
@@ -217,30 +193,30 @@
       "obsidian-git:Open Git source control": false
     }
   },
-  "active": "bf7b689b398cf442",
+  "active": "e3af40ece15e6c37",
   "lastOpenFiles": [
+    "AI Infra/softirq.md",
     "AI Infra/bio.md",
-    "AI Infra/workqueue机制.md",
-    "AI Infra/write系统调用.md",
-    "AI Infra",
-    "agent基建",
-    "未命名.base",
-    "未命名.canvas",
-    "llm/学习/LLM流程.md",
-    "llm/未命名.md",
-    "llm/学习",
-    "产品经理/案例/MuleRun.md",
-    "未命名",
-    "llm",
-    "产品经理/案例",
-    "agent安全/prompt注入及处理/攻击想法.md",
-    "agent安全/agent-sandbox/paper/(NDSS'25) IsolateGPT.md",
-    "agent安全/prompt注入及处理",
-    "agent安全",
     "Tools-Needed-For-VibeCoding.md",
+    "产品经理/案例/MuleRun.md",
+    "产品经理/案例",
+    "产品经理",
+    "agent安全/agent-sandbox/paper/(NDSS'25) IsolateGPT.md",
+    "agent安全/prompt注入及处理/攻击想法.md",
     "agent安全/agent-sandbox/paper",
+    "agent安全/prompt注入及处理",
+    "agent安全/agent-sandbox",
+    "agent安全",
+    "AI Infra/write系统调用.md",
+    "AI Infra/workqueue机制.md",
+    "AI Infra",
+    "harness/how-to-harness/README.md",
     "vibe-coding/harness/how-to-harness/README.md.md",
-    "2026-04-29.md",
-    "test again.md"
+    "vibe-coding/harness/how-to-harness",
+    "vibe-coding/harness",
+    "vibe-coding",
+    "harness/how-to-harness/README.md.md",
+    "test again.md",
+    "未命名.md"
   ]
 }

@@ -70,35 +70,42 @@ workqueue 的思路是：
 
 它的核心思想是：
 
+| 对象 | 作用 |
+| --- | --- |
+| `workqueue_struct` | 对外暴露的逻辑队列，记录 flags、`max_active`、flush 等策略 |
+| `pool_workqueue` / `pwq` | `workqueue_struct` 和 `worker_pool` 的绑定实例，记录该队列在该 pool 上的并发状态 |
+| `worker_pool` | 实际执行池，维护 worklist、worker 列表、空闲 worker 和 worker 管理逻辑 |
+| `worker` / `kworker` | pool 中的内核线程，负责取出 work 并执行回调 |
+
+也就是说，`workqueue_struct` 不直接等于一组线程。它是逻辑队列；真正执行 work 的是底层 `worker_pool`。多个 workqueue 可以共享同一个 `worker_pool`。
+
+提交路径可以概括为：
+
 ```text
-workqueue_struct 是用户看到的队列接口
-worker_pool 是实际执行 work 的线程池
-kworker 是 worker_pool 里的执行线程
-pool_workqueue 把一个 workqueue_struct 和一个 worker_pool 连接起来
+queue_work(wq, work)
+  -> select pwq
+  -> pwq->pool
+  -> pool->worklist
+  -> kworker
+  -> work->func(work)
 ```
 
-也就是说，一个 workqueue 不一定直接拥有一批固定线程。很多 workqueue 可以共享底层 worker pool。内核统一管理 worker 数量、并发度、CPU 绑定、空闲 worker、按需创建 worker 等事情。
-
-大致关系：
+bound workqueue 按 CPU 映射到 per-CPU pool：
 
 ```text
-workqueue_struct
-  -> pool_workqueue on CPU0
-       -> worker_pool CPU0
-          -> kworker/0:0
-          -> kworker/0:1
-  -> pool_workqueue on CPU1
-       -> worker_pool CPU1
-          -> kworker/1:0
-          -> kworker/1:1
-
-unbound workqueue
-  -> pool_workqueue
-       -> unbound worker_pool
-          -> kworker/u...
+bound workqueue_struct
+  CPU0 submission -> pwq(CPU0) -> worker_pool(CPU0) -> kworker/0:*
+  CPU1 submission -> pwq(CPU1) -> worker_pool(CPU1) -> kworker/1:*
 ```
 
-用户把 `work_struct` 排到某个 `workqueue_struct`。真正执行时，这个 work 会被放进对应的 `pool_workqueue`，再进入某个 `worker_pool` 的工作链表，最后由 `kworker` 线程取出来执行。
+unbound workqueue 不绑定提交 CPU，而是按 attributes 映射到 unbound pool：
+
+```text
+unbound workqueue_struct
+  submission -> pwq(attrs) -> unbound worker_pool -> kworker/u*
+```
+
+图中的箭头表示映射和提交路径，不表示所有权。`workqueue_struct` 通过 `pwq` 映射到底层 pool；`kworker` 属于 `worker_pool`，不是某个 workqueue 私有线程。
 
 ## 最小使用方式
 
@@ -254,16 +261,24 @@ wq = alloc_workqueue("name", flags, max_active);
 queue_work(wq, work);
 ```
 
-它记录的信息包括：
+关键字段（不同内核版本会有调整）：
 
-| 内容 | 作用 |
+| 字段 / 类型 | 作用 |
 | --- | --- |
-| 名字 | 影响 `kworker` / debug 信息，方便排查 |
-| flags | 是否 unbound、highpri、freezable、mem reclaim 等 |
-| max_active | 限制每个 CPU 或 pool 上同时活跃的 work 数 |
-| pwq 列表 | 连接到各个底层 worker_pool |
-| flush 状态 | 支持 `flush_workqueue()` 等同步操作 |
-| rescuer | `WQ_MEM_RECLAIM` 队列可能有专用救援线程 |
+| `char name[WQ_NAME_LEN]` | workqueue 名字，影响 debug 信息和 worker 描述 |
+| `unsigned int flags` | `WQ_UNBOUND`、`WQ_HIGHPRI`、`WQ_FREEZABLE`、`WQ_MEM_RECLAIM` 等属性 |
+| `struct list_head pwqs` | 该 workqueue 关联的所有 `pool_workqueue` |
+| `struct pool_workqueue __rcu * __percpu *cpu_pwq` | bound workqueue 的 per-CPU `pwq` |
+| `struct pool_workqueue __rcu *dfl_pwq` | unbound workqueue 的默认 `pwq` |
+| `struct workqueue_attrs *unbound_attrs` | unbound workqueue 的调度属性，如 cpumask、NUMA、nice 等 |
+| `int max_active` / `int min_active` | 当前并发上限和下限 |
+| `int saved_max_active` / `int saved_min_active` | suspend / freeze 等场景下保存的并发配置 |
+| `int work_color` / `int flush_color` | flush 机制使用的颜色状态 |
+| `atomic_t nr_pwqs_to_flush` | 当前 flush 需要等待的 `pwq` 数量 |
+| `struct list_head flusher_queue` | 等待 `flush_workqueue()` 的 flusher 列表 |
+| `struct list_head maydays` | 请求 rescuer 介入的 `pwq` 列表 |
+| `struct worker *rescuer` | `WQ_MEM_RECLAIM` 队列的救援 worker |
+| `struct wq_node_nr_active *node_nr_active[]` | unbound workqueue 的 per-node active 计数和限流状态 |
 
 重点是：它不是简单的“线程数组”。它更像一个逻辑队列和策略对象。
 
@@ -271,17 +286,28 @@ queue_work(wq, work);
 
 `worker_pool` 是真正管理 worker 线程的地方。
 
-它大概负责：
+关键字段（不同内核版本会有调整）：
 
-| 内容 | 作用 |
+| 字段 / 类型 | 作用 |
 | --- | --- |
-| `worklist` | 等待执行的 work 链表 |
-| `workers` | 属于这个 pool 的 worker 列表 |
-| `idle_list` | 当前空闲的 worker |
-| `nr_workers` / `nr_idle` | worker 数量统计 |
-| `lock` | 保护 pool 内部状态 |
-| `cpu` / `attrs` | bound pool 绑定 CPU；unbound pool 使用属性描述 |
-| manager 逻辑 | 按需创建、唤醒、回收 worker |
+| `raw_spinlock_t lock` | 保护 pool 内部状态 |
+| `int cpu` | bound pool 绑定的 CPU；unbound pool 不绑定提交 CPU |
+| `int node` | pool 所属 NUMA node |
+| `int id` | pool ID |
+| `unsigned int flags` | pool 内部状态标志 |
+| `struct list_head worklist` | 等待执行的 work 链表 |
+| `struct list_head workers` | 属于该 pool 的所有 worker |
+| `struct list_head idle_list` | 当前空闲 worker 链表 |
+| `int nr_workers` / `int nr_idle` | worker 总数和空闲数 |
+| `int nr_running` | 正在运行的 worker 数，用于并发管理 |
+| `struct timer_list idle_timer` | 空闲 worker 回收定时器 |
+| `struct work_struct idle_cull_work` | 空闲 worker 清理任务 |
+| `struct timer_list mayday_timer` | worker 长时间不足时触发 rescuer 的定时器 |
+| `DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER)` | 正在执行 work 的 worker 索引 |
+| `struct workqueue_attrs *attrs` | unbound pool 的调度属性 |
+| `struct worker *manager` | 当前承担 manager 角色的 worker 记录 |
+| `struct ida worker_ida` | 分配 worker 在线程名中的编号 |
+| `int refcnt` | unbound pool 引用计数 |
 
 一个容易混淆的点：普通驱动或子系统通常不会自己创建 `worker_pool`。你创建的是 `workqueue_struct`：
 
@@ -333,33 +359,46 @@ workqueue_struct <-> worker_pool
 
 因为一个逻辑 workqueue 可能映射到多个 pool。比如 bound workqueue 在每个 CPU 上都有一个对应 pool；unbound workqueue 也可能因为 NUMA、cpumask、priority 属性映射到不同 pool。
 
-`pwq` 里会记录：
+关键字段（不同内核版本会有调整）：
 
-| 内容 | 作用 |
+| 字段 / 类型 | 作用 |
 | --- | --- |
-| 所属 `workqueue_struct` | 这是哪个逻辑队列 |
-| 所属 `worker_pool` | 实际由哪个 pool 执行 |
-| `nr_active` | 当前活跃 work 数 |
-| `max_active` | 并发上限 |
-| `inactive_works` | 超过并发上限后暂存的 work |
-| 引用计数和 flush 颜色 | 支持生命周期和 flush 同步 |
+| `struct workqueue_struct *wq` | 所属逻辑 workqueue |
+| `struct worker_pool *pool` | 实际执行 work 的 pool |
+| `int nr_active` | 当前活跃 work 数 |
+| `struct list_head inactive_works` | 超过并发上限后暂存的 work |
+| `int work_color` / `int flush_color` | flush 机制使用的颜色状态 |
+| `int nr_in_flight[WORK_NR_COLORS]` | 各颜色下尚未完成的 work 数 |
+| `bool plugged` | 暂停从该 `pwq` 激活 work |
+| `int refcnt` | `pwq` 生命周期引用计数 |
+| `struct list_head pending_node` | 挂到 per-node active 限流等待队列的节点 |
+| `struct list_head pwqs_node` | 挂到 `wq->pwqs` 的节点 |
+| `struct list_head mayday_node` | 挂到 `wq->maydays` 的节点，用于 rescuer |
+| `u64 stats[PWQ_NR_STATS]` | per-pwq 统计数据 |
+| `struct kthread_work release_work` | unbound `pwq` 释放时使用的异步释放任务 |
 
-`max_active` 是通过 `pwq` 发挥作用的。它决定同一个 workqueue 在某个 pool 上最多同时激活多少 work。
+`max_active` 不是单纯靠一个字段完成。当前内核中，`wq->max_active`、`wq->node_nr_active`、`pwq->nr_active`、`pwq->inactive_works` 等共同完成并发限制；老版本里也能看到 `pwq->max_active` 这类字段。
 
 ## `struct worker`
 
 `worker` 表示一个具体的 kworker 线程。
 
-它大概记录：
+关键字段（不同内核版本会有调整）：
 
-| 内容 | 作用 |
+| 字段 / 类型 | 作用 |
 | --- | --- |
-| `task` | 对应的 `task_struct`，也就是内核线程 |
-| `pool` | 它属于哪个 worker_pool |
-| `current_work` | 当前正在执行的 work |
-| `current_func` | 当前正在执行的函数 |
-| `current_pwq` | 当前 work 来自哪个 pwq |
-| flags | idle、running、manager 等状态 |
+| `struct task_struct *task` | 对应的内核线程 |
+| `struct worker_pool *pool` | 所属 worker pool |
+| `struct work_struct *current_work` | 当前正在执行的 work |
+| `work_func_t current_func` | 当前正在执行的回调函数 |
+| `struct pool_workqueue *current_pwq` | 当前 work 对应的 `pwq` |
+| `struct list_head scheduled` | 当前 worker 本地待执行 work 链表 |
+| `struct list_head node` | 挂到 `pool->workers` 的节点 |
+| `struct list_head entry` / `struct hlist_node hentry` | idle 或 busy 状态下使用的链表节点 |
+| `unsigned int flags` | idle、running、manager、rescuer 等 worker 状态 |
+| `int id` | worker 在 pool 内的编号 |
+| `char desc[WORKER_DESC_LEN]` | 调试用描述信息 |
+| `struct workqueue_struct *rescue_wq` | rescuer worker 对应的 workqueue |
 
 执行 work 的最终动作就是 worker 线程调用：
 
@@ -539,7 +578,7 @@ workqueue attributes
 
 workqueue 需要控制并发度。
 
-如果当前 `pwq->nr_active < max_active`，work 可以直接进入 active 状态，挂到 pool 的 `worklist`，等待 worker 执行。
+如果当前 `pwq->nr_active` 没有达到该 workqueue 在对应范围内的 active 上限，work 可以直接进入 active 状态，挂到 pool 的 `worklist`，等待 worker 执行。
 
 如果已经达到并发上限，work 会先进入 `inactive_works`：
 
@@ -553,9 +592,9 @@ queue_work()
 
 当某个 active work 完成后，workqueue 会把 inactive 里的后续 work 激活。
 
-这就是 `max_active` 的基本含义：限制同一个 workqueue 在一个 pool 上同时“活跃”的 work 数量。
+这就是 `max_active` 的基本含义：限制同一个 workqueue 同时“活跃”的 work 数量。
 
-更准确地说，`max_active` 是 per-CPU 属性，即使对 unbound workqueue 也是这样理解。传 `0` 表示使用内核默认值，普通场景通常推荐这么做，除非你明确需要限流。如果要严格“一次只跑一个 work 并按提交顺序执行”，不要靠 `max_active = 1` 拼出来，而应该用 `alloc_ordered_workqueue()`。
+bound workqueue 通常按 CPU 对应的 `pwq` 控制 active 数；unbound workqueue 会结合 unbound attrs、NUMA node 和 `node_nr_active` 等状态控制并发。传 `0` 表示使用内核默认值，普通场景通常推荐这么做，除非你明确需要限流。如果要严格“一次只跑一个 work 并按提交顺序执行”，不要靠 `max_active = 1` 拼出来，而应该用 `alloc_ordered_workqueue()`。
 
 ## 5. 唤醒或创建 worker
 
