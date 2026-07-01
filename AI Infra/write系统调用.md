@@ -156,13 +156,93 @@ page_off   = file_offset % PAGE_SIZE
 | --- | --- | --- |
 | 1. 确定写入偏移 | 普通 `write()` 用 `struct file.f_pos`；`pwrite()` 用调用者传入的 offset；`O_APPEND` 会原子地以 inode 当前 `i_size` 作为写入起点 | `f_pos` 存在打开文件对象 `struct file` 里。`dup()` / `fork()` 共享同一个打开文件对象时也共享这个偏移；两次独立 `open()` 则各有自己的 `f_pos` |
 | 2. 找到文件的 page cache | 通过 `struct file.f_mapping` 找到 `address_space`，再用 `page_index` 查 `address_space.i_pages` | `address_space` 通常挂在 inode 上，管理这个文件的缓存页；`i_pages` 现在通常是 XArray，key 是文件页号，value 是 page / folio |
-| 3. 没有缓存页就创建 | 分配新的 page / folio，锁住后插入 `i_pages` | 页的元数据在内核的 `struct page` / `struct folio`，真实数据在物理内存页里。部分页覆盖时，文件系统可能需要先把旧内容读进来，避免没写到的字节被破坏 |
+| 3. 没有缓存页就创建 | 分配新的 page / folio，锁住后插入 `i_pages` | 页的元数据在内核的 `struct page` / `struct folio`，真实数据在物理内存页里。如果只写页里的一小段，文件系统可能需要**先读入这个页的旧内容**，再覆盖新数据，避免其他字节被破坏 |
 | 4. 从用户 buffer 复制 | `copy_from_user()` 把用户虚拟地址里的数据复制到 page cache 页的对应 offset | 源头是用户进程地址空间里的 `buf`；目标是内核管理的物理页。这里可能触发用户页缺页、权限检查、cache / TLB miss |
 | 5. 更新文件状态 | 更新 `f_pos`、必要时更新 `inode.i_size`，并修改 `mtime` / `ctime` | `f_pos` 表示这次 `write()` 后下次顺序写的位置；`i_size`、时间戳存在 inode 里，是文件元数据 |
 | 6. 标记 dirty | 把被改过的 page / folio 标记为 dirty，并把它挂到后续 writeback 能发现的结构上 | dirty 状态存在页/folio flags、`address_space` 标记和 inode / superblock 的 dirty/writeback 链路里；这表示“内存里的文件内容比磁盘新” |
 | 7. 返回用户态 | 返回已经成功复制进 page cache 的字节数，或者错误码 | 返回值可能小于 `len`；后续写回错误也可能延迟到 `fsync()` / `close()` 等路径暴露 |
 
 所以这一步结束后，后续是否能稳定保存，还要看 writeback、文件系统日志和设备 flush。
+
+## page cache 相关数据结构
+
+page cache 的核心不是“有一个叫 page cache 的全局数组”，而是每个可缓存对象都有自己的 `address_space`，再由 `address_space` 管一组按文件偏移索引的 folio。
+
+对普通文件来说，关系大概是：
+
+```text
+struct inode
+  i_mapping
+    -> struct address_space
+       host
+         -> struct inode
+       i_pages
+         -> XArray: file page index -> struct folio
+       a_ops
+         -> address_space_operations
+            write_begin / write_end
+            dirty_folio
+            writepages
+            read_folio
+       i_mmap
+         -> 映射这个文件的 mmap VMA 集合
+       wb_err
+         -> 记录异步 writeback 错误
+
+struct file
+  f_mapping
+    -> 通常指向 inode->i_mapping
+```
+
+其中最关键的是 `address_space.i_pages`。它是 page cache 的索引结构，现代内核里通常是 XArray：key 是文件内的页号，value 是对应的 `struct folio`。所以对文件偏移 `offset` 来说，查找路径可以理解成：
+
+```text
+file
+  -> f_mapping
+  -> address_space.i_pages
+  -> index = offset >> PAGE_SHIFT
+  -> folio
+```
+
+`folio` 是现在内核里比 `page` 更常用的页缓存抽象。一个 `struct page` 描述一个物理页帧；一个 `struct folio` 表示一组连续、同属一个 mapping、作为一个单位管理的 page。小文件缓存常见还是单页 folio，但大 folio 可以让 page cache、readahead、writeback 少处理很多小对象。
+
+一个 page cache folio 里最重要的信息可以这样看：
+
+| 字段 / 状态 | 含义 |
+| --- | --- |
+| `folio->mapping` | 指回所属的 `address_space`，也就是“这个 folio 属于哪个文件或缓存对象” |
+| `folio->index` | 这个 folio 在文件里的起始页号，用来还原文件偏移 |
+| `folio_address(folio)` / page data | 真正保存文件内容的内存页 |
+| `PG_locked` | 保护这个 folio 正在被填充、修改、回写或截断，避免并发路径踩在一起 |
+| `PG_uptodate` | 表示 folio 中的内容是有效文件数据；读路径会在 I/O 完成后设置它 |
+| `PG_dirty` | 表示内存里的内容比后端存储新，需要后续 writeback |
+| `PG_writeback` | 表示这个 folio 已经被提交或正在提交写回，完成回调会清掉它 |
+| `PG_referenced` / LRU 状态 | 给内存回收判断冷热，clean page cache 可以直接丢，dirty folio 要先写回 |
+
+XArray 除了保存 `index -> folio`，还可以给条目打 mark。page cache 会用类似 dirty、writeback、towrite 这样的标记，帮助 writeback 快速找到“这个 mapping 里哪些 folio 脏了 / 正在回写 / 本轮要写”。否则一个大文件只改了几个页，writeback 就可能不得不从头扫完整个文件索引。
+
+把写入路径和这些结构对上，就是：
+
+```text
+buffered write
+  -> 通过 file->f_mapping 找到 address_space
+  -> 用文件偏移算出 page index
+  -> 在 mapping->i_pages 里找 folio
+  -> 找不到就分配 folio，并插入 XArray
+  -> 锁住 folio
+  -> 必要时先把旧内容读进来，保证页内未覆盖字节不丢
+  -> copy_from_user() 覆盖 folio 中的一段
+  -> 调用文件系统 / mapping 的 dirty_folio 路径
+  -> 设置 PG_dirty，并更新 mapping / inode / writeback 相关统计和标记
+  -> 解锁 folio
+```
+
+这里的 `address_space_operations` 是 page cache 和具体文件系统之间的接口。page cache 负责“第几个 folio、有没有缓存、dirty/writeback 状态”；文件系统负责“这个文件偏移最终对应哪些磁盘块、怎么分配空间、怎么写 journal 或 COW 元数据”。所以 `write()` 进入 buffered write 后，经常会看到类似 `write_begin` / `write_end` / `dirty_folio` / `writepages` 这些钩子。
+
+还有两个容易混淆的点：
+
+- `address_space` 不只服务普通 `read()` / `write()`。`mmap` 同一个文件时，VMA 也会通过这个 mapping 复用同一批 page cache folio；所以 `write()` 改的缓存页和 `mmap` 看到的文件页本质上是同一套缓存。
+- dirty folio 不等于马上有一个 BIO。dirty 只是 page cache 层面的状态；真正构造 BIO 要等 writeback 扫到这个 mapping，调用文件系统的 `writepages`，完成块映射后才进入 block layer。
 
 ## 为什么要复制到页缓存
 
